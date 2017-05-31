@@ -2,6 +2,7 @@ package com.insthync.practicechatapp;
 
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -11,13 +12,23 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.net.URISyntaxException;
 import java.util.ArrayList;
+
+import io.socket.client.IO;
+import io.socket.client.Socket;
+import io.socket.emitter.Emitter;
 
 public class ChatActivity extends AppCompatActivity {
     public static String id = "";
     ArrayList<ChatData> chatData = new ArrayList<ChatData>();
     MsgAdapter msgAdapter;
+    Socket socket;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -43,10 +54,108 @@ public class ChatActivity extends AppCompatActivity {
             finish();
             return;
         }
+
+        try {
+            socket = IO.socket("http://192.168.1.40:3210");
+        } catch (URISyntaxException ex) {
+            Log.e("TAG", ex.getMessage());
+            finish();
+        }
+
+        socket.on(Socket.EVENT_CONNECT, onConnect);
+        socket.on(Socket.EVENT_DISCONNECT, onDisconnect);
+        socket.on(Socket.EVENT_CONNECT_ERROR, onConnectError);
+        socket.on(Socket.EVENT_CONNECT_TIMEOUT, onConnectError);
+        socket.on("login", onLogin);
+        socket.on("joinRoom", onJoinRoom);
+        socket.on("enterMessage", onEnterMessage);
+        socket.on("deleteMessage", onDeleteMessage);
     }
 
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+
+        if (socket == null)
+            return;
+
+        socket.disconnect();
+
+        socket.off(Socket.EVENT_CONNECT, onConnect);
+        socket.off(Socket.EVENT_DISCONNECT, onDisconnect);
+        socket.off(Socket.EVENT_CONNECT_ERROR, onConnectError);
+        socket.off(Socket.EVENT_CONNECT_TIMEOUT, onConnectError);
+        socket.off("login", onLogin);
+        socket.off("joinRoom", onJoinRoom);
+        socket.off("enterMessage", onEnterMessage);
+        socket.off("deleteMessage", onDeleteMessage);
+    }
+
+    private Emitter.Listener onConnect = new Emitter.Listener() {
+        @Override
+        public void call(Object... args) {
+            Toast.makeText(getApplicationContext(),
+                    "Connected to chat server", Toast.LENGTH_LONG).show();
+
+            try {
+                JSONObject obj = new JSONObject();
+                obj.put("userId", id);
+                obj.put("roomId", "global");
+                socket.emit("joinRoom", obj);
+            } catch (JSONException ex) {
+                Log.e("TAG", ex.getMessage());
+            }
+        }
+    };
+
+    private Emitter.Listener onDisconnect = new Emitter.Listener() {
+        @Override
+        public void call(Object... args) {
+            Toast.makeText(getApplicationContext(),
+                    "Disconnected from chat server", Toast.LENGTH_LONG).show();
+        }
+    };
+
+    private Emitter.Listener onConnectError = new Emitter.Listener() {
+        @Override
+        public void call(Object... args) {
+            Toast.makeText(getApplicationContext(),
+                    "Chat server connection error", Toast.LENGTH_LONG).show();
+
+            finish();
+        }
+    };
+
+    private Emitter.Listener onLogin = new Emitter.Listener() {
+        @Override
+        public void call(Object... args) {
+
+        }
+    };
+
+    private Emitter.Listener onJoinRoom = new Emitter.Listener() {
+        @Override
+        public void call(Object... args) {
+
+        }
+    };
+
+    private Emitter.Listener onEnterMessage = new Emitter.Listener() {
+        @Override
+        public void call(Object... args) {
+
+        }
+    };
+
+    private Emitter.Listener onDeleteMessage = new Emitter.Listener() {
+        @Override
+        public void call(Object... args) {
+
+        }
+    };
+
     void sendMessage(String message) {
-        
+
     }
 
 
