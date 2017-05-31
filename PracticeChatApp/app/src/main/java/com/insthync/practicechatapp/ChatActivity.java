@@ -6,7 +6,6 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
 import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -26,9 +25,11 @@ import io.socket.emitter.Emitter;
 
 public class ChatActivity extends AppCompatActivity {
     public static String id = "";
-    ArrayList<ChatData> chatData = new ArrayList<ChatData>();
+    ArrayList<ChatData> chatDataList = new ArrayList<ChatData>();
     MsgAdapter msgAdapter;
     Socket socket;
+    String roomId;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -38,7 +39,7 @@ public class ChatActivity extends AppCompatActivity {
         final EditText msgText = (EditText)findViewById(R.id.msgText);
         final Button enterButton = (Button)findViewById(R.id.enterButton);
 
-        msgContainer.setAdapter(msgAdapter = new MsgAdapter(chatData));
+        msgContainer.setAdapter(msgAdapter = new MsgAdapter(chatDataList));
         msgAdapter.notifyDataSetChanged();
 
         enterButton.setOnClickListener(new View.OnClickListener() {
@@ -46,6 +47,7 @@ public class ChatActivity extends AppCompatActivity {
             public void onClick(View v) {
                 String msg = msgText.getText().toString();
                 sendMessage(msg);
+                msgText.setText("");
             }
         });
 
@@ -70,6 +72,7 @@ public class ChatActivity extends AppCompatActivity {
         socket.on("joinRoom", onJoinRoom);
         socket.on("enterMessage", onEnterMessage);
         socket.on("deleteMessage", onDeleteMessage);
+        socket.connect();
     }
 
     @Override
@@ -94,9 +97,57 @@ public class ChatActivity extends AppCompatActivity {
     private Emitter.Listener onConnect = new Emitter.Listener() {
         @Override
         public void call(Object... args) {
-            Toast.makeText(getApplicationContext(),
-                    "Connected to chat server", Toast.LENGTH_LONG).show();
+            try {
+                JSONObject obj = new JSONObject();
+                obj.put("userId", id);
+                obj.put("loginToken", "");  // Not required
+                socket.emit("login", obj);
+            } catch (JSONException ex) {
+                Log.e("TAG", ex.getMessage());
+            }
 
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Toast.makeText(getApplicationContext(),
+                            "Connected to chat server", Toast.LENGTH_LONG).show();
+
+                }
+            });
+        }
+    };
+
+    private Emitter.Listener onDisconnect = new Emitter.Listener() {
+        @Override
+        public void call(Object... args) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Toast.makeText(getApplicationContext(),
+                            "Disconnected from chat server", Toast.LENGTH_LONG).show();
+                }
+            });
+        }
+    };
+
+    private Emitter.Listener onConnectError = new Emitter.Listener() {
+        @Override
+        public void call(Object... args) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Toast.makeText(getApplicationContext(),
+                            "Chat server connection error", Toast.LENGTH_LONG).show();
+
+                    finish();
+                }
+            });
+        }
+    };
+
+    private Emitter.Listener onLogin = new Emitter.Listener() {
+        @Override
+        public void call(Object... args) {
             try {
                 JSONObject obj = new JSONObject();
                 obj.put("userId", id);
@@ -108,42 +159,43 @@ public class ChatActivity extends AppCompatActivity {
         }
     };
 
-    private Emitter.Listener onDisconnect = new Emitter.Listener() {
-        @Override
-        public void call(Object... args) {
-            Toast.makeText(getApplicationContext(),
-                    "Disconnected from chat server", Toast.LENGTH_LONG).show();
-        }
-    };
-
-    private Emitter.Listener onConnectError = new Emitter.Listener() {
-        @Override
-        public void call(Object... args) {
-            Toast.makeText(getApplicationContext(),
-                    "Chat server connection error", Toast.LENGTH_LONG).show();
-
-            finish();
-        }
-    };
-
-    private Emitter.Listener onLogin = new Emitter.Listener() {
-        @Override
-        public void call(Object... args) {
-
-        }
-    };
-
     private Emitter.Listener onJoinRoom = new Emitter.Listener() {
         @Override
         public void call(Object... args) {
-
+            try {
+                JSONObject obj = (JSONObject) args[0];
+                roomId = obj.getString("roomId");
+            } catch (JSONException ex) {
+                Log.e("TAG", ex.getMessage());
+            }
         }
     };
 
     private Emitter.Listener onEnterMessage = new Emitter.Listener() {
         @Override
         public void call(Object... args) {
+            try {
+                JSONObject obj = (JSONObject) args[0];
+                String messageId = obj.getString("messageId");
+                String roomId = obj.getString("roomId");
+                String userId = obj.getString("userId");
+                String message = obj.getString("message");
 
+                final ChatData chatData = new ChatData();
+                chatData.messageId = messageId;
+                chatData.roomId = roomId;
+                chatData.userId = userId;
+                chatData.message = message;
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        chatDataList.add(chatData);
+                        msgAdapter.notifyDataSetChanged();
+                    }
+                });
+            } catch (JSONException ex) {
+                Log.e("TAG", ex.getMessage());
+            }
         }
     };
 
@@ -155,7 +207,17 @@ public class ChatActivity extends AppCompatActivity {
     };
 
     void sendMessage(String message) {
+        if (roomId == null || roomId.isEmpty())
+            return;
 
+        try {
+            JSONObject obj = new JSONObject();
+            obj.put("roomId", roomId);
+            obj.put("message", message);
+            socket.emit("enterMessage", obj);
+        } catch (JSONException ex) {
+            Log.e("TAG", ex.getMessage());
+        }
     }
 
 
@@ -167,19 +229,19 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     public class MsgAdapter extends BaseAdapter {
-        ArrayList<ChatData> chatData;
-        public MsgAdapter(ArrayList<ChatData> chatData) {
-            this.chatData = chatData;
+        ArrayList<ChatData> chatDataList;
+        public MsgAdapter(ArrayList<ChatData> chatDataList) {
+            this.chatDataList = chatDataList;
         }
 
         @Override
         public int getCount() {
-            return chatData.size();
+            return chatDataList.size();
         }
 
         @Override
         public Object getItem(int position) {
-            return chatData.get(position);
+            return chatDataList.get(position);
         }
 
         @Override
@@ -195,8 +257,8 @@ public class ChatActivity extends AppCompatActivity {
             TextView name = (TextView)convertView.findViewById(R.id.msgName);
             TextView message = (TextView)convertView.findViewById(R.id.msgMessage);
 
-            name.setText(chatData.get(position).userId);
-            message.setText(chatData.get(position).message);
+            name.setText(chatDataList.get(position).userId);
+            message.setText(chatDataList.get(position).message);
             return convertView;
         }
     }

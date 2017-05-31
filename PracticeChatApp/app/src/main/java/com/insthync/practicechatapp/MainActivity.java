@@ -1,5 +1,6 @@
 package com.insthync.practicechatapp;
 
+import android.content.Intent;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.View;
@@ -21,6 +22,8 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
                 String id = idText.getText().toString();
                 ChatActivity.id = id;
+
+                startActivity(new Intent(MainActivity.this, ChatActivity.class));
                 finish();
             }
         });
